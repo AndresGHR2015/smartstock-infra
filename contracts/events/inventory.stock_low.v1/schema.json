@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartstock.local/contracts/events/inventory.stock_low.v1/schema.json",
+  "title": "Inventory stock low v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "occurred_at",
+    "sku",
+    "previous_stock",
+    "current_stock",
+    "threshold",
+    "sale_id"
+  ],
+  "properties": {
+    "event_id": { "type": "string", "minLength": 1 },
+    "event_type": { "const": "inventory.stock_low" },
+    "event_version": { "const": 1 },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "sku": { "type": "string", "minLength": 1 },
+    "previous_stock": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+    "current_stock": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+    "threshold": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+    "sale_id": { "type": "string", "minLength": 1 }
+  }
+}

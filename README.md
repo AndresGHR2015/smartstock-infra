@@ -35,9 +35,8 @@ El Gateway expone el acceso al frontend. Inventario, Ventas y Compras mantienen 
 
 ## Entornos y contratos
 
-- **Docker Compose.** Configuración para construir y levantar las aplicaciones y sus dependencias en el entorno de desarrollo.
-- **Kubernetes.** Manifiestos y configuración de despliegue para ejecutar las imágenes de los componentes en el clúster local.
-- **Contratos.** `contracts/` reúne las definiciones Protobuf y los esquemas de mensajes de Kafka. El contrato de Inventario se ubica en `contracts/proto/inventory/v1/inventory.proto`.
-- **CI e imágenes.** Cada microservicio mantiene su Dockerfile, su pipeline y la cobertura mínima del 60 %. La integración consume las imágenes versionadas de los componentes.
+- **Docker Compose y Kubernetes.** Previsto para una etapa posterior; este repositorio todavía no contiene configuración de despliegue.
+- **Contratos.** `contracts/` contiene las definiciones Protobuf, el esquema GraphQL y el evento de Kafka. Véase [la guía de contratos](contracts/README.md) para sus reglas, distribución y validación.
+- **CI e imágenes.** La integración y el consumo de imágenes versionadas quedan pendientes.
 
 Cada repo de aplicación mantiene su código y sus dependencias. Este repo se ocupa de cómo se conectan y ejecutan juntos.

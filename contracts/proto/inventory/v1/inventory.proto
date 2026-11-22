@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package smartstock.inventory.v1;
+
+option go_package = "smartstock/contracts/gen/go/inventory/v1;inventoryv1";
+option java_multiple_files = true;
+option java_package = "com.smartstock.contracts.inventory.v1";
+
+service InventoryService {
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+  rpc DeductStock(DeductStockRequest) returns (DeductStockResponse);
+}
+
+message Product {
+  string sku = 1;
+  string name = 2;
+  int32 stock = 3;
+  int32 threshold = 4;
+}
+
+message GetProductRequest {
+  string sku = 1;
+}
+
+message GetProductResponse {
+  enum Result {
+    RESULT_UNSPECIFIED = 0;
+    FOUND = 1;
+    NOT_FOUND = 2;
+    INVALID_SKU = 3;
+  }
+
+  Result result = 1;
+  // Present only when result is FOUND.
+  Product product = 2;
+}
+
+message DeductStockRequest {
+  string sale_id = 1;
+  string sku = 2;
+  int32 quantity = 3;
+}
+
+message DeductStockResponse {
+  enum Result {
+    RESULT_UNSPECIFIED = 0;
+    DEDUCTED = 1;
+    PRODUCT_NOT_FOUND = 2;
+    INSUFFICIENT_STOCK = 3;
+    INVALID_ARGUMENT = 4;
+    SALE_ID_CONFLICT = 5;
+  }
+
+  Result result = 1;
+  // Snapshot immediately after this deduction; present only for DEDUCTED.
+  Product product = 2;
+}

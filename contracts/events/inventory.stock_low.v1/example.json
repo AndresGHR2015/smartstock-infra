@@ -1,0 +1,11 @@
+{
+  "event_id": "evt-sale-001",
+  "event_type": "inventory.stock_low",
+  "event_version": 1,
+  "occurred_at": "2026-01-01T12:00:00Z",
+  "sku": "SKU-001",
+  "previous_stock": 10,
+  "current_stock": 7,
+  "threshold": 7,
+  "sale_id": "sale-001"
+}

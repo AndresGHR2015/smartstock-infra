@@ -1,0 +1,52 @@
+type Query {
+  product(sku: String!): Product
+  sale(id: ID!): Sale
+}
+
+type Mutation {
+  createSale(input: CreateSaleInput!): CreateSaleResult!
+}
+
+type Product {
+  sku: String!
+  name: String!
+  stock: Int!
+  threshold: Int!
+}
+
+enum SaleStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum RejectionReason {
+  PRODUCT_NOT_FOUND
+  INSUFFICIENT_STOCK
+}
+
+type Sale {
+  saleId: ID!
+  sku: String!
+  quantity: Int!
+  status: SaleStatus!
+  rejectionReason: RejectionReason
+}
+
+input CreateSaleInput {
+  saleId: ID!
+  sku: String!
+  quantity: Int!
+}
+
+enum CreateSaleOutcome {
+  ACCEPTED
+  INVALID_ARGUMENT
+  SALE_ID_CONFLICT
+  UNKNOWN
+}
+
+type CreateSaleResult {
+  outcome: CreateSaleOutcome!
+  sale: Sale
+}
