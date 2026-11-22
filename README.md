@@ -1,37 +1,43 @@
 # SmartStock · Infraestructura e integración
 
-Repositorio que reúne la configuración local, los manifiestos de Kubernetes y los contratos compartidos del MVP de SmartStock. El sistema tiene tres microservicios de negocio y tres componentes de aplicación que los conectan con el operador.
+Repositorio de integración de SmartStock, una aplicación distribuida para gestionar inventario, ventas y compras con reposición asistida por IA. Centraliza los contratos entre servicios y la configuración para ejecutar el proyecto en local y en Kubernetes.
 
-## Repositorios del proyecto
+**Stack** · Docker Compose, Kubernetes con kind, Kustomize, PostgreSQL, Apache Kafka en modo KRaft, GitHub Actions y GHCR.
 
-Clona los repositorios como carpetas hermanas dentro de `SmartStock/`.
+## Repositorios
 
-| Repositorio | Responsabilidad |
+Los repositorios se clonan como carpetas hermanas bajo `SmartStock/`.
+
+| Repositorio | Componente |
 |---|---|
-| `smartstock-inventory` | Inventario en Go. |
-| `smartstock-sales` | Ventas en Java. |
-| `smartstock-purchasing` | Compras en C# y .NET. |
-| `smartstock-gateway` | BFF en NestJS. |
-| `smartstock-web` | Interfaz en React. |
-| `smartstock-mcp` | Agente y servidor MCP en Node.js. |
-| `smartstock-infra` | Docker Compose, Kubernetes y contratos compartidos. |
+| `smartstock-inventario` | Microservicio de existencias en Go. |
+| `smartstock-ventas` | Microservicio de ventas en Java y Spring Boot. |
+| `smartstock-compras` | Microservicio de abastecimiento en C# y .NET. |
+| `smartstock-gateway` | API Gateway y BFF en NestJS. |
+| `smartstock-front` | Interfaz web en React y TypeScript. |
+| `smartstock-mcp` | Agente de reposición y servidor MCP. |
+| `smartstock-infra` | Entornos, despliegue y contratos compartidos. |
 
-## Integración del MVP
+## Arquitectura
 
-1. El frontend registra una venta mediante GraphQL en el Gateway.
-2. El Gateway usa gRPC para llamar a Ventas, que solicita a Inventario el descuento por gRPC.
-3. Al cruzar el umbral de stock, Inventario publica `inventory.stock_low.v1` en Kafka. Compras consume la alerta.
-4. El Gateway inicia por REST un análisis que usa herramientas MCP para consultar datos y solicitar un borrador.
-5. El operador aprueba el borrador desde la interfaz. El Gateway se comunica con Compras por Kafka.
+```mermaid
+flowchart TD
+    F["Frontend"] -->|"GraphQL"| G["Gateway"]
+    G -->|"gRPC"| I["Inventario"]
+    G -->|"gRPC"| V["Ventas"]
+    G <-->|"Kafka"| C["Compras"]
+    G <-->|"REST interno"| M["Agente y servidor MCP"]
+    V -->|"gRPC"| I
+    I -->|"Kafka"| C
+```
+
+El Gateway expone el acceso al frontend. Inventario, Ventas y Compras mantienen bases PostgreSQL propias. Kafka transporta las alertas de reposición y los mensajes de Compras. El agente usa herramientas MCP para consultar datos y solicitar borradores que el operador puede aprobar.
 
 ## Entornos y contratos
 
-- **Docker Compose** levanta el entorno local cuando estén disponibles los Dockerfiles y el archivo `compose.yaml`.
-- **Kubernetes con kind y Kustomize** aloja y configura el despliegue de demostración.
-- **PostgreSQL** aloja bases separadas, con credenciales propias, para Inventario, Ventas y Compras.
-- **Contratos** se versionan en `contracts/`. El primer contrato acordado es `contracts/proto/inventory/v1/inventory.proto`.
-- **GitHub Actions y GHCR** se usarán para los pipelines por repositorio y el registro de imágenes. Cada microservicio se compila y prueba por separado, con una cobertura mínima del 60 %.
+- **Docker Compose.** Configuración para construir y levantar las aplicaciones y sus dependencias en el entorno de desarrollo.
+- **Kubernetes.** Manifiestos y configuración de despliegue para ejecutar las imágenes de los componentes en el clúster local.
+- **Contratos.** `contracts/` reúne las definiciones Protobuf y los esquemas de mensajes de Kafka. El contrato de Inventario se ubica en `contracts/proto/inventory/v1/inventory.proto`.
+- **CI e imágenes.** Cada microservicio mantiene su Dockerfile, su pipeline y la cobertura mínima del 60 %. La integración consume las imágenes versionadas de los componentes.
 
-## Primer hito
-
-Demostrar que una venta descuenta stock y que Compras recibe por Kafka la alerta generada al cruzar el umbral. La demo final agrega la propuesta mediante MCP y la aprobación por GraphQL.
+Cada repo de aplicación mantiene su código y sus dependencias. Este repo se ocupa de cómo se conectan y ejecutan juntos.
