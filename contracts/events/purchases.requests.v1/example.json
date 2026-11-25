@@ -1,0 +1,12 @@
+{
+  "request_id": "request-draft-001",
+  "type": "create_draft",
+  "version": 1,
+  "occurred_at": "2026-11-24T12:00:00Z",
+  "payload": {
+    "order_id": "order-001",
+    "need_event_id": "event-001",
+    "offer_id": "offer-001",
+    "quantity": 10
+  }
+}

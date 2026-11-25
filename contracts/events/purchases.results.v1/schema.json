@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartstock.local/contracts/events/purchases.results.v1/schema.json",
+  "title": "Purchases results v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "type", "version", "occurred_at", "outcome", "data"],
+  "properties": {
+    "request_id": { "$ref": "#/$defs/id" },
+    "type": { "enum": ["get_need", "list_needs", "list_offers", "get_order", "create_draft", "decide_order"] },
+    "version": { "const": 1 },
+    "occurred_at": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "outcome": { "enum": ["OK", "NOT_FOUND", "INVALID_ARGUMENT", "CONFLICT", "FORBIDDEN"] },
+    "data": { "type": ["object", "null"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "outcome": { "const": "OK" } } },
+      "then": {
+        "oneOf": [
+          { "properties": { "type": { "const": "get_need" }, "data": { "$ref": "#/$defs/need" } } },
+          { "properties": { "type": { "const": "list_needs" }, "data": { "$ref": "#/$defs/needs" } } },
+          { "properties": { "type": { "const": "list_offers" }, "data": { "$ref": "#/$defs/offers" } } },
+          { "properties": { "type": { "enum": ["get_order", "create_draft", "decide_order"] }, "data": { "$ref": "#/$defs/order" } } }
+        ]
+      },
+      "else": { "properties": { "data": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "outcome": { "const": "OK" }, "type": { "const": "create_draft" } } },
+      "then": { "properties": { "data": { "type": "object", "properties": { "status": { "const": "DRAFT" } } } } }
+    },
+    {
+      "if": { "properties": { "outcome": { "const": "OK" }, "type": { "const": "decide_order" } } },
+      "then": { "properties": { "data": { "type": "object", "properties": { "status": { "enum": ["APPROVED", "REJECTED"] } } } } }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "quantity": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+    "need": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event_id", "sku", "current_stock", "threshold"],
+      "properties": {
+        "event_id": { "$ref": "#/$defs/id" },
+        "sku": { "$ref": "#/$defs/id" },
+        "current_stock": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "threshold": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
+      }
+    },
+    "offer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["offer_id", "supplier_id", "sku", "unit_price", "currency", "minimum_quantity", "lead_time_days"],
+      "properties": {
+        "offer_id": { "$ref": "#/$defs/id" },
+        "supplier_id": { "$ref": "#/$defs/id" },
+        "sku": { "$ref": "#/$defs/id" },
+        "unit_price": { "type": "string", "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "minimum_quantity": { "$ref": "#/$defs/quantity" },
+        "lead_time_days": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
+      }
+    },
+    "needs": {
+      "type": "object", "additionalProperties": false, "required": ["items", "next_cursor"],
+      "properties": {
+        "items": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/need" } },
+        "next_cursor": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] }
+      }
+    },
+    "offers": {
+      "type": "object", "additionalProperties": false, "required": ["items", "next_cursor"],
+      "properties": {
+        "items": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/offer" } },
+        "next_cursor": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] }
+      }
+    },
+    "order": {
+      "type": "object", "additionalProperties": false,
+      "required": ["order_id", "need_event_id", "offer", "quantity", "status", "revision", "decided_by"],
+      "properties": {
+        "order_id": { "$ref": "#/$defs/id" },
+        "need_event_id": { "$ref": "#/$defs/id" },
+        "offer": { "$ref": "#/$defs/offer" },
+        "quantity": { "$ref": "#/$defs/quantity" },
+        "status": { "enum": ["DRAFT", "APPROVED", "REJECTED"] },
+        "revision": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "decided_by": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] }
+      },
+      "allOf": [{
+        "if": { "properties": { "status": { "const": "DRAFT" } } },
+        "then": { "properties": { "decided_by": { "type": "null" } } },
+        "else": { "properties": { "decided_by": { "$ref": "#/$defs/id" } } }
+      }]
+    }
+  }
+}

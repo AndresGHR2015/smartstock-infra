@@ -1,0 +1,24 @@
+{
+  "request_id": "request-draft-001",
+  "type": "create_draft",
+  "version": 1,
+  "occurred_at": "2026-11-24T12:00:01Z",
+  "outcome": "OK",
+  "data": {
+    "order_id": "order-001",
+    "need_event_id": "event-001",
+    "offer": {
+      "offer_id": "offer-001",
+      "supplier_id": "supplier-001",
+      "sku": "SKU-001",
+      "unit_price": "12.50",
+      "currency": "USD",
+      "minimum_quantity": 5,
+      "lead_time_days": 3
+    },
+    "quantity": 10,
+    "status": "DRAFT",
+    "revision": 1,
+    "decided_by": null
+  }
+}

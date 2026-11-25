@@ -37,11 +37,102 @@ Esquema JSON Schema draft 2020-12: `events/inventory.stock_low.v1/schema.json`; 
 
 Se genera solo cuando `previous_stock > threshold` y `current_stock <= threshold`: 10 → 7 con umbral 7 sí genera alerta. El esquema valida la forma y los rangos, pero la comparación entre campos es una regla semántica que el productor debe verificar. La clave Kafka será el SKU codificado en UTF-8.
 
-Inventario guarda el evento en un outbox en la misma transacción que el descuento y el movimiento. El publicador puede entregar el evento más de una vez; Compras debe deduplicar por `event_id` de forma transaccional con la persistencia de la necesidad de reposición. No se garantiza entrega exactamente una vez. No existe un esquema ni comportamiento de Compras implementado aquí.
+Inventario guarda el evento en un outbox en la misma transacción que el descuento y el movimiento. El publicador puede entregar el evento más de una vez; Compras debe deduplicar por `event_id` de forma transaccional con la persistencia de la necesidad de reposición. No se garantiza entrega exactamente una vez. Este contrato no implementa el comportamiento de Compras.
+
+## Contrato v1: Gateway–Compras por Kafka
+
+Esta sección y los esquemas `events/purchases.requests.v1/` y
+`events/purchases.results.v1/` definen el contrato autorizado por el responsable
+del proyecto para Gateway y Compras. No describen capacidades ya implementadas,
+no modifican el GraphQL existente y no autorizan acceso a la base de Compras.
+Se definen dos topics con esos mismos nombres: Gateway
+publica solicitudes y Compras publica resultados. Cada mensaje es JSON UTF-8;
+la clave Kafka es `request_id` codificado en UTF-8. Los esquemas son la
+referencia para los campos obligatorios, tipos y valores; rechazan campos
+adicionales. Las cadenas identificadoras son opacas, sensibles a mayúsculas y
+no vacías ni compuestas solo por espacios, sin normalización. Las fechas son
+RFC 3339 UTC terminadas en `Z`.
+
+### Operaciones
+
+| `type` | Solicitud | Resultado `OK` |
+|---|---|---|
+| `get_need` | `event_id` de una alerta | Necesidad registrada para ese evento. |
+| `list_needs` | `sku`, `limit`, `cursor` | Página de necesidades del SKU. |
+| `list_offers` | `sku`, `limit`, `cursor` | Página de ofertas del SKU. |
+| `get_order` | `order_id` | Estado y términos de la orden. |
+| `create_draft` | `order_id`, `need_event_id`, `offer_id`, `quantity` | Orden en `DRAFT`. |
+| `decide_order` | `order_id`, `expected_revision`, `decision`, `actor_id` | Orden `APPROVED` o `REJECTED`. |
+
+Para las listas, `cursor: null` inicia la consulta, `limit` está entre 1 y
+100 y `next_cursor: null` indica fin. Un cursor no nulo es opaco, pertenece a
+la operación y SKU originales y no debe modificarse; uno inválido o expirado
+produce `INVALID_ARGUMENT`. Cada página es una lectura actual: no se garantiza
+una instantánea entre páginas y pueden aparecer cambios concurrentes. El cliente
+debe deduplicar por `event_id` u `offer_id` y reiniciar si necesita información
+actualizada. El orden es estable por identificador ascendente para datos sin
+cambios; una respuesta tiene como máximo el `limit` solicitado.
+
+La necesidad representa la alerta persistida, no el stock actual. Una oferta
+contiene proveedor, SKU, precio unitario decimal como cadena no negativa, código
+de moneda de tres letras mayúsculas, cantidad mínima y plazo entero en días. El
+precio evita conversiones de punto flotante; la validez del código de moneda y
+las condiciones comerciales requieren validación de Compras. La oferta incluida
+en una orden es la instantánea aceptada al crearla, no una consulta dinámica.
+Compras valida que necesidad y oferta existan y compartan SKU, que la oferta sea
+aplicable y que la cantidad cumpla su mínimo; un borrador no aprueba ni compra.
+Las reglas comerciales adicionales deberán acordarse antes de implementar.
+
+`order_id` lo genera Gateway y es único y estable. No se permite reutilizarlo
+para otra orden. Una orden empieza en `DRAFT`, revisión 1; solo una decisión
+humana autorizada puede cambiarla a `APPROVED` o `REJECTED`. La decisión es
+atómica y exige que la revisión coincida; al aplicarse incrementa la revisión
+en uno y registra `decided_by`. Una decisión concurrente o sobre una orden ya
+decidida devuelve `CONFLICT`, sin cambiarla. Una repetición de la misma
+solicitud se trata según las reglas de idempotencia, no como una nueva
+decisión. `actor_id` identifica al operador autenticado; no es una prueba de
+identidad por sí mismo.
+
+### Resultados, recuperación y seguridad
+
+- `OK` lleva datos con la forma correspondiente a la operación. `NOT_FOUND`,
+  `INVALID_ARGUMENT`, `CONFLICT` y `FORBIDDEN` son resultados definitivos con
+  `data: null`. `NOT_FOUND` indica ausencia al procesar esa solicitud, no
+  garantiza que un evento o comando concurrente no se aplique después.
+- Gateway genera un `request_id` globalmente único para cada operación y guarda
+  la solicitud completa antes de publicarla. Una repetición usa exactamente
+  el mismo mensaje, incluido `occurred_at`. Compras conserva el resultado de
+  cada solicitud, incluso las consultas y rechazos, y lo vuelve a publicar ante
+  una repetición idéntica. Para una lectura actualizada se genera otro ID.
+- La deduplicación, el cambio de negocio cuando exista y el resultado/outbox
+  se confirman atómicamente en Compras antes de confirmar el offset. Gateway
+  persiste y deduplica resultados antes de confirmar sus offsets. La entrega es
+  al menos una vez; una publicación o confirmación Kafka no demuestra que
+  Compras haya aplicado la operación. Las implementaciones deben conservar los
+  registros de idempotencia durante toda la vida operativa de v1; cualquier
+  política de expiración requiere un contrato posterior.
+- Si se reutiliza un `request_id` con otro contenido, Gateway debe impedir su
+  publicación. Compras no ejecuta la segunda solicitud ni sustituye el resultado
+  original: registra el incidente y detiene su procesamiento para intervención
+  operativa, sin emitir un resultado ambiguo con el mismo ID. Los mensajes
+  malformados también requieren intervención sin avanzar el offset.
+- Ante timeout, pérdida de respuesta o reinicio el resultado es **desconocido**,
+  no un rechazo. Gateway conserva el estado pendiente y puede reenviar el
+  mensaje idéntico; correlaciona por `request_id` y `type`. Puede consultar
+  una orden con otro ID, pero la ausencia no demuestra que un comando
+  concurrente no vaya a completarse. No debe crear un nuevo ID de operación
+  para repetir una decisión o creación incierta.
+- Kafka y el transporte deben autenticar servicios y limitar publicación y
+  consumo mediante ACL. Gateway autentica y autoriza al operador antes de
+  aceptar una decisión y transmite su identidad; Compras solo acepta decisiones
+  del Gateway autorizado y valida la autorización mediante un mecanismo
+  confiable acordado entre ambos. Un agente MCP nunca puede aprobar ni rechazar.
+  El formato de credenciales y la propagación verificable de identidad aún
+  requieren acuerdo; hasta entonces no debe habilitarse este flujo en producción.
 
 ## Distribución entre repositorios
 
-Usar este repositorio como **submódulo Git fijado a un commit completo** en `vendor/smartstock-infra` de cada repositorio consumidor. Tras acordar y confirmar los contratos en un commit de este repositorio, el coordinador debe comunicar su SHA completo; una copia sin commit o una rama móvil no identifica una revisión reproducible. No se crea ningún commit ni se publica nada en esta sesión.
+Usar este repositorio como **submódulo Git fijado a un commit completo** en `vendor/smartstock-infra` de cada repositorio consumidor. Tras acordar y confirmar los contratos en un commit de este repositorio, el coordinador debe comunicar su SHA completo; una copia sin commit o una rama móvil no identifica una revisión reproducible.
 
 En cada consumidor, con una URL accesible del repositorio de infraestructura:
 
