@@ -31,12 +31,12 @@ flowchart TD
     I -->|"Kafka"| C
 ```
 
-El Gateway expone el acceso al frontend. Inventario, Ventas y Compras mantienen bases PostgreSQL propias. Kafka transporta las alertas de reposición y los mensajes de Compras. El agente usa herramientas MCP para consultar datos y solicitar borradores que el operador puede aprobar.
+El Gateway expone el acceso al frontend. Inventario, Ventas, Compras y el registro asíncrono del Gateway mantienen bases PostgreSQL propias. Kafka transporta las alertas de reposición y las solicitudes/resultados de Compras. La integración con el agente MCP sigue pendiente; el diagrama representa también esa arquitectura objetivo.
 
 ## Entornos y contratos
 
-- **Docker Compose y Kubernetes.** Previsto para una etapa posterior; este repositorio todavía no contiene configuración de despliegue.
-- **Contratos.** `contracts/` contiene las definiciones Protobuf, el esquema GraphQL y el evento de Kafka. Véase [la guía de contratos](contracts/README.md) para sus reglas, distribución y validación.
+- **Docker Compose.** Entorno local de ventas/inventario y del intercambio Gateway–Compras, con una prueba reproducible de las seis operaciones y recuperación tras reinicios; consulta [arranque y demostración](compose/README.md). Kubernetes queda pendiente.
+- **Contratos.** `contracts/` contiene las definiciones Protobuf, el esquema GraphQL y los esquemas Kafka de alertas, solicitudes y resultados de Compras. Véase [la guía de contratos](contracts/README.md) para sus reglas, distribución y validación.
 - **CI e imágenes.** La integración y el consumo de imágenes versionadas quedan pendientes.
 
 Cada repo de aplicación mantiene su código y sus dependencias. Este repo se ocupa de cómo se conectan y ejecutan juntos.

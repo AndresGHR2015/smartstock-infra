@@ -1,0 +1,188 @@
+services:
+  gateway-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway-local
+    volumes:
+      - gateway-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d gateway"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  inventory-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: inventory
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: inventory-local
+    volumes:
+      - inventory-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory -d inventory"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  sales-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: sales
+      POSTGRES_USER: sales
+      POSTGRES_PASSWORD: sales-local
+    volumes:
+      - sales-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sales -d sales"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  compras-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: compras
+      POSTGRES_USER: compras
+      POSTGRES_PASSWORD: compras-local
+    volumes:
+      - compras-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compras -d compras"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  kafka:
+    image: apache/kafka:4.1.1
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  kafka-init:
+    image: apache/kafka:4.1.1
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for topic in inventory.stock_low.v1 purchases.requests.v1 purchases.results.v1; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
+            --create --if-not-exists --topic "$$topic" --partitions 1 --replication-factor 1
+        done
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  inventory:
+    build:
+      context: ../smartstock-inventario
+    environment:
+      DATABASE_URL: postgres://inventory:inventory-local@inventory-db:5432/inventory?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      GRPC_ADDR: :50051
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  sales:
+    build:
+      context: ../smartstock-ventas
+    environment:
+      DATABASE_URL: jdbc:postgresql://sales-db:5432/sales
+      DATABASE_USER: sales
+      DATABASE_PASSWORD: sales-local
+      GRPC_PORT: "9090"
+      INVENTORY_TARGET: inventory:50051
+    depends_on:
+      sales-db:
+        condition: service_healthy
+      inventory:
+        condition: service_started
+
+  compras:
+    build:
+      context: ../smartstock-compras
+    environment:
+      DATABASE_URL: Host=compras-db;Database=compras;Username=compras;Password=compras-local
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: smartstock-compras
+      PURCHASES_ENVIRONMENT: local
+      PURCHASES_ALLOW_LOCAL_DECISIONS: "${PURCHASES_ALLOW_LOCAL_DECISIONS:-false}"
+      PURCHASES_LOCAL_ACTOR_ID: local-operator
+    depends_on:
+      compras-db:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  gateway:
+    build:
+      context: ../smartstock-gateway
+    environment:
+      PORT: "3000"
+      INVENTORY_GRPC_ADDRESS: inventory:50051
+      SALES_GRPC_ADDRESS: sales:9090
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PURCHASES_DATABASE_URL: postgres://gateway:gateway-local@gateway-db:5432/gateway
+      PURCHASES_INTERNAL_TOKEN: "${PURCHASES_INTERNAL_TOKEN:-smartstock-local-development-only}"
+      PURCHASES_ENVIRONMENT: local
+      PURCHASES_ALLOW_LOCAL_DECISIONS: "${PURCHASES_ALLOW_LOCAL_DECISIONS:-false}"
+      PURCHASES_LOCAL_ACTOR_ID: local-operator
+    ports:
+      - "127.0.0.1:${GATEWAY_HTTP_PORT:-3001}:3000"
+    depends_on:
+      gateway-db:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      inventory:
+        condition: service_started
+      sales:
+        condition: service_started
+
+  front:
+    build:
+      context: ../smartstock-front
+      args:
+        VITE_GRAPHQL_URL: /graphql
+
+  web:
+    image: nginx:alpine
+    ports:
+      - "127.0.0.1:${DEMO_HTTP_PORT:-8080}:80"
+    volumes:
+      - ./compose/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      gateway:
+        condition: service_started
+      front:
+        condition: service_started
+
+volumes:
+  gateway-data:
+  inventory-data:
+  sales-data:
+  compras-data:
+  kafka-data:
