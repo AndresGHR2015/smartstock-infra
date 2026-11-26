@@ -9,6 +9,21 @@ option java_package = "com.smartstock.contracts.sales.v1";
 service SalesService {
   rpc CreateSale(CreateSaleRequest) returns (CreateSaleResponse);
   rpc GetSale(GetSaleRequest) returns (GetSaleResponse);
+  rpc GetSalesOverview(GetSalesOverviewRequest) returns (GetSalesOverviewResponse);
+}
+
+message GetSalesOverviewRequest {}
+
+message RecentSale {
+  string sale_id = 1;
+  string sku = 2;
+  int32 quantity = 3;
+  string created_at = 4;
+}
+
+message GetSalesOverviewResponse {
+  int64 units_today = 1;
+  repeated RecentSale recent = 2;
 }
 
 enum SaleStatus {

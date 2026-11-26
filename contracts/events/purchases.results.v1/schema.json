@@ -7,7 +7,7 @@
   "required": ["request_id", "type", "version", "occurred_at", "outcome", "data"],
   "properties": {
     "request_id": { "$ref": "#/$defs/id" },
-    "type": { "enum": ["get_need", "list_needs", "list_offers", "get_order", "create_draft", "decide_order"] },
+    "type": { "enum": ["get_need", "list_needs", "list_offers", "get_order", "create_draft", "decide_order", "get_overview"] },
     "version": { "const": 1 },
     "occurred_at": { "type": "string", "format": "date-time", "pattern": "Z$" },
     "outcome": { "enum": ["OK", "NOT_FOUND", "INVALID_ARGUMENT", "CONFLICT", "FORBIDDEN"] },
@@ -18,6 +18,7 @@
       "if": { "properties": { "outcome": { "const": "OK" } } },
       "then": {
         "oneOf": [
+          { "properties": { "type": { "const": "get_overview" }, "data": { "$ref": "#/$defs/overview" } } },
           { "properties": { "type": { "const": "get_need" }, "data": { "$ref": "#/$defs/need" } } },
           { "properties": { "type": { "const": "list_needs" }, "data": { "$ref": "#/$defs/needs" } } },
           { "properties": { "type": { "const": "list_offers" }, "data": { "$ref": "#/$defs/offers" } } },
@@ -38,6 +39,28 @@
   "$defs": {
     "id": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "quantity": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+    "overview": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pending_count", "open_order_count", "needs"],
+      "properties": {
+        "pending_count": { "$ref": "#/$defs/count" },
+        "open_order_count": { "$ref": "#/$defs/count" },
+        "needs": {
+          "type": "array", "maxItems": 5,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["event_id", "sku", "occurred_at", "status"],
+            "properties": {
+              "event_id": { "$ref": "#/$defs/id" },
+              "sku": { "$ref": "#/$defs/id" },
+              "occurred_at": { "type": "string", "format": "date-time", "pattern": "Z$" },
+              "status": { "enum": ["PENDING", "DRAFT", "APPROVED"] }
+            }
+          }
+        }
+      }
+    },
+    "count": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
     "need": {
       "type": "object", "additionalProperties": false,
       "required": ["event_id", "sku", "current_stock", "threshold"],

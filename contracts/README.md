@@ -7,6 +7,7 @@ Estos archivos son contratos, no implementaciones. La primera ruta es frontend �
 Definición: `proto/inventory/v1/inventory.proto`, paquete `smartstock.inventory.v1`.
 
 - `GetProduct(sku)` devuelve `FOUND` y un `Product` con `sku`, `name`, `stock` y `threshold`; o `NOT_FOUND` / `INVALID_SKU` sin producto.
+- `GetInventoryOverview()` devuelve el total de productos con stock en el umbral o por debajo y hasta cuatro productos cuyo stock es como máximo 1,5 veces el umbral. Los críticos aparecen primero.
 - `DeductStock(sale_id, sku, quantity)` devuelve `DEDUCTED` y la instantánea del producto inmediatamente posterior al descuento, o `PRODUCT_NOT_FOUND`, `INSUFFICIENT_STOCK`, `INVALID_ARGUMENT` o `SALE_ID_CONFLICT`, sin producto. No puede dejar stock negativo.
 - Para una solicitud válida, `sale_id` identifica globalmente la operación: Inventario conserva atómicamente sus argumentos y resultado definitivo, incluidos rechazos por producto inexistente o stock insuficiente. Repetir exactamente los mismos datos devuelve el resultado original, incluso si el stock cambió; no vuelve a descontar ni emite otro evento. Otra combinación de SKU o cantidad con el mismo `sale_id` devuelve `SALE_ID_CONFLICT`. Las solicitudes inválidas no reservan el identificador.
 - Solicitudes concurrentes con el mismo identificador deben respetar estas reglas. El descuento, movimiento, resultado idempotente y, cuando corresponda, outbox se confirman en una misma transacción.
@@ -19,6 +20,7 @@ Definición: `proto/sales/v1/sales.proto`, paquete `smartstock.sales.v1`.
 - `CreateSale(sale_id, sku, quantity)` devuelve `ACCEPTED` y una venta en `PENDING`, `CONFIRMED` o `REJECTED`; o `INVALID_ARGUMENT` / `SALE_ID_CONFLICT` sin venta. `ACCEPTED` también cubre una repetición idéntica y no implica confirmación.
 - El cliente genera y conserva un `sale_id` globalmente único y estable. Repetirlo con idénticos SKU y cantidad devuelve la misma venta en su estado actual; usarlo con otros datos es conflicto, incluso después de un rechazo. Las solicitudes inválidas no reservan el identificador.
 - `GetSale(sale_id)` devuelve `FOUND` y la venta, `NOT_FOUND` o `INVALID_SALE_ID`. `REJECTED` lleva `PRODUCT_NOT_FOUND` o `INSUFFICIENT_STOCK`; los demás estados llevan `REJECTION_REASON_UNSPECIFIED`. Un resultado desconocido o no especificado no debe interpretarse como éxito.
+- `GetSalesOverview()` suma las unidades de ventas confirmadas registradas durante el día de operación en `America/Santiago` y devuelve hasta cinco ventas confirmadas recientes, con fecha de registro UTC.
 - Ventas solo marca `CONFIRMED` después de que Inventario confirme `DEDUCTED`. Un rechazo definitivo de Inventario produce `REJECTED`; un timeout, desconexión o fallo técnico no es un rechazo. Ventas debe conservar `PENDING` y reconciliar reintentando Inventario con el mismo identificador y argumentos hasta conocer el resultado; no puede iniciar otro descuento con un ID nuevo.
 - Los resultados de negocio usan gRPC `OK`; un estado distinto de `OK` es técnico o de transporte y puede dejar el resultado incierto. Si se pierde la respuesta, consultar o reintentar con el mismo `sale_id`. Un `NOT_FOUND` tras una respuesta perdida no demuestra que una solicitud concurrente no vaya a completarse: reintentar con los mismos datos.
 
@@ -27,6 +29,7 @@ Definición: `proto/sales/v1/sales.proto`, paquete `smartstock.sales.v1`.
 Definición SDL: `graphql/schema.graphql`. El Gateway mapeará los contratos anteriores; no está implementado aquí.
 
 - `product(sku)` y `sale(id)` devuelven el objeto o `null` si no existe. Entradas inválidas o fallos técnicos producen `errors` de GraphQL con códigos `INVALID_ARGUMENT` o `UPSTREAM_UNAVAILABLE` en `extensions.code`, respectivamente; no se confunden con ausencia. El campo afectado es `null`.
+- `inventoryOverview`, `salesOverview` y `purchasesOverview` se consultan independientemente. Un fallo técnico deja el campo afectado en `null` con `UPSTREAM_UNAVAILABLE`. Una lectura exitosa sin registros devuelve conteos en cero y listas vacías.
 - `createSale(input: {saleId, sku, quantity})` devuelve `ACCEPTED` con `sale` no nula para cualquier estado de la venta, `INVALID_ARGUMENT` o `SALE_ID_CONFLICT` sin venta, o `UNKNOWN` sin venta si el Gateway no puede determinar el resultado. `UNKNOWN` no significa rechazo. Si falla la propia respuesta GraphQL o la conexión, el resultado también es incierto.
 - El frontend crea y guarda `saleId`, SKU y cantidad antes de enviar; ante `UNKNOWN`, errores o desconexión consulta `sale(id)` y/o reintenta `createSale` con los mismos datos. `PENDING` requiere consultas posteriores; `NOT_FOUND` se representa por `sale: null` y no impide reintentar. Un cambio de datos requiere una operación nueva con otro ID.
 - `rejectionReason` solo está presente para `REJECTED`; sus valores tienen el mismo significado que en gRPC. `Int` es de 32 bits. Aunque GraphQL acepta números como `ID`, los clientes deben enviar `saleId` e `id` como cadenas para preservar el identificador exacto.
@@ -63,6 +66,12 @@ RFC 3339 UTC terminadas en `Z`.
 | `get_order` | `order_id` | Estado y términos de la orden. |
 | `create_draft` | `order_id`, `need_event_id`, `offer_id`, `quantity` | Orden en `DRAFT`. |
 | `decide_order` | `order_id`, `expected_revision`, `decision`, `actor_id` | Orden `APPROVED` o `REJECTED`. |
+| `get_overview` | Objeto vacío | Total de necesidades registradas, total de órdenes `DRAFT` o `APPROVED` y hasta cinco necesidades recientes. |
+
+En el resumen, una necesidad figura como `APPROVED` si tiene una orden aprobada, como
+`DRAFT` si tiene un borrador y como `PENDING` en los demás casos. Compras aún no registra
+recepciones. Actualiza Gateway y Compras antes de enviar `get_overview`, ya que los
+consumidores anteriores rechazan tipos de operación desconocidos.
 
 Para las listas, `cursor: null` inicia la consulta, `limit` está entre 1 y
 100 y `next_cursor: null` indica fin. Un cursor no nulo es opaco, pertenece a

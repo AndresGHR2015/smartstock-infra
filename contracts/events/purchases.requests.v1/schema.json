@@ -7,12 +7,18 @@
   "required": ["request_id", "type", "version", "occurred_at", "payload"],
   "properties": {
     "request_id": { "$ref": "#/$defs/id" },
-    "type": { "enum": ["get_need", "list_needs", "list_offers", "get_order", "create_draft", "decide_order"] },
+    "type": { "enum": ["get_need", "list_needs", "list_offers", "get_order", "create_draft", "decide_order", "get_overview"] },
     "version": { "const": 1 },
     "occurred_at": { "type": "string", "format": "date-time", "pattern": "Z$" },
     "payload": { "type": "object" }
   },
   "oneOf": [
+    {
+      "properties": {
+        "type": { "const": "get_overview" },
+        "payload": { "type": "object", "additionalProperties": false }
+      }
+    },
     {
       "properties": {
         "type": { "const": "get_need" },

@@ -8,7 +8,15 @@ option java_package = "com.smartstock.contracts.inventory.v1";
 
 service InventoryService {
   rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+  rpc GetInventoryOverview(GetInventoryOverviewRequest) returns (GetInventoryOverviewResponse);
   rpc DeductStock(DeductStockRequest) returns (DeductStockResponse);
+}
+
+message GetInventoryOverviewRequest {}
+
+message GetInventoryOverviewResponse {
+  int32 critical_count = 1;
+  repeated Product attention = 2;
 }
 
 message Product {

@@ -1,6 +1,9 @@
 type Query {
   product(sku: String!): Product
   sale(id: ID!): Sale
+  inventoryOverview: InventoryOverview
+  salesOverview: SalesOverview
+  purchasesOverview: PurchasesOverview
 }
 
 type Mutation {
@@ -12,6 +15,41 @@ type Product {
   name: String!
   stock: Int!
   threshold: Int!
+}
+
+type InventoryOverview {
+  criticalCount: Int!
+  attention: [Product!]!
+}
+
+type SalesOverview {
+  unitsToday: Float!
+  recent: [RecentSale!]!
+}
+
+type RecentSale {
+  sku: String!
+  quantity: Int!
+  createdAt: String!
+}
+
+type PurchasesOverview {
+  pendingCount: Int!
+  openOrderCount: Int!
+  needs: [DashboardNeed!]!
+}
+
+type DashboardNeed {
+  eventId: ID!
+  sku: String!
+  occurredAt: String!
+  status: DashboardNeedStatus!
+}
+
+enum DashboardNeedStatus {
+  PENDING
+  DRAFT
+  APPROVED
 }
 
 enum SaleStatus {
