@@ -14,7 +14,7 @@ const allowDecisions = process.env.PURCHASES_ALLOW_LOCAL_DECISIONS === 'true';
 const prefix = `smoke-${randomUUID()}`;
 
 async function http(route, { body, key, authorized = true, origin = baseUrl } = {}) {
-  const headers = {};
+  const headers = { connection: 'close' };
   if (authorized) headers.authorization = `Bearer ${token}`;
   if (body) headers['content-type'] = 'application/json';
   if (key) headers['idempotency-key'] = key;
@@ -258,8 +258,8 @@ async function main() {
   }
   if (testTransportFailures) {
     compose('stop', 'compras');
-    const pending = await submit('list_offers', { sku: 'SKU-001', limit: 10, cursor: null });
     try {
+      const pending = await submit('list_offers', { sku: 'SKU-001', limit: 10, cursor: null });
       await until(
         async () => execFileSync('docker', [
           'compose', '-p', project, 'exec', '-T', 'gateway-db',
